@@ -16,7 +16,7 @@ public class ClientApp extends JFrame {
     private final JPanel mainContainer = new JPanel(cardLayout);
     private final ApiService apiService = new ApiService();
 
-    // Reference ka panelima koji se moraju ažurirati
+
     private HubPanel hubPanel;
     private SessionListPanel sessionListPanel;
     private AdminUserListPanel adminUserListPanel;
@@ -173,18 +173,31 @@ public class ClientApp extends JFrame {
         }
     }
 
-    public void fetchSessions(String query) {
+    // Ovu metodu poziva Dialog za pretragu ili refresh dugme
+    public void fetchSessions(String queryParams) {
         new SwingWorker<List<Session>, Void>() {
             @Override
             protected List<Session> doInBackground() throws Exception {
-                return apiService.searchSessions();
+                // Pozivamo servis u pozadini
+                return apiService.searchSessions(queryParams);
             }
+
             @Override
             protected void done() {
                 try {
-                    sessionListPanel.updateTable(get());
+
+                    List<Session> sessions = get();
+
+                    if (sessionListPanel != null) {
+                        sessionListPanel.updateTable(sessions);
+                    }
+
                 } catch (Exception e) {
+                    setCursor(Cursor.getDefaultCursor());
                     e.printStackTrace();
+
+                    JOptionPane.showMessageDialog(ClientApp.this,
+                            "Greška: " + e.getMessage());
                 }
             }
         }.execute();

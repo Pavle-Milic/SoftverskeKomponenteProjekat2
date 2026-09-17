@@ -4,13 +4,14 @@ import org.example.ClientApp;
 import org.example.model.Session;
 import org.example.model.SessionPlayer;
 import org.example.state.AppState;
+import org.example.utils.Theme;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-// 1. Promena: extends JPanel
 public class MySessionsPanel extends JPanel {
 
     private JTable table;
@@ -19,104 +20,108 @@ public class MySessionsPanel extends JPanel {
     private List<Session> currentSessions;
 
     public MySessionsPanel(ClientApp clientApp) {
-        // 2. Uklonjen super(parent, title, modal) jer ovo vise nije dijalog
         this.clientApp = clientApp;
-        setLayout(new BorderLayout());
+        setLayout(new BorderLayout(10, 10));
+        setBackground(Theme.BG_COLOR);
+        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // --- HEADER (Dugme Nazad) ---
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton btnBack = new JButton("<< Nazad na Hub");
-        btnBack.addActionListener(e -> clientApp.navigateTo("HUB")); // Povratak na Hub
-        topPanel.add(btnBack);
+        // --- HEADER ---
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setOpaque(false);
+
+        JLabel lblTitle = new JLabel("  Moje Sesije");
+        lblTitle.setFont(Theme.HEADER_FONT);
+        lblTitle.setForeground(Theme.TEXT_DARK);
+
+        JButton btnBack = new JButton("<< Nazad");
+        Theme.styleSecondaryButton(btnBack);
+        btnBack.addActionListener(e -> clientApp.navigateTo("HUB"));
+
+        topPanel.add(btnBack, BorderLayout.WEST);
+        topPanel.add(lblTitle, BorderLayout.CENTER); // Naslov u sredini (opciono)
+
+        // Desno dugme za refresh
+        JButton btnRefresh = new JButton("Osveži");
+        Theme.styleSecondaryButton(btnRefresh);
+        btnRefresh.addActionListener(e -> loadSessions());
+        topPanel.add(btnRefresh, BorderLayout.EAST);
+
         add(topPanel, BorderLayout.NORTH);
 
         // --- TABELA ---
         String[] columns = {"ID", "Naslov", "Igra", "Vreme", "Status", "Uloga"};
         tableModel = new DefaultTableModel(columns, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
+            @Override public boolean isCellEditable(int row, int column) { return false; }
         };
         table = new JTable(tableModel);
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        Theme.styleTable(table); // PRIMENA STILA
 
-        // --- DUGMICI (AKCIJE) ---
-        JPanel buttonPanel = new JPanel();
+        // Centriranje
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+        centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+        for(int i=0; i<table.getColumnCount(); i++){
+            table.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+        }
 
-        JButton btnConclude = new JButton("Conclude Selected");
-        btnConclude.setBackground(new Color(144, 238, 144)); // Svetlo zelena
+        JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.getViewport().setBackground(Color.WHITE);
+        scrollPane.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
 
-        JButton btnCancel = new JButton("Cancel Selected");
-        btnCancel.setBackground(new Color(255, 99, 71)); // Crvena
+        add(scrollPane, BorderLayout.CENTER);
 
-        JButton btnRefresh = new JButton("Osveži");
+        // --- ACTION PANEL (Dugmici) ---
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 10));
+        buttonPanel.setOpaque(false);
+
+        JButton btnConclude = new JButton("Zaključi Sesiju (Conclude)");
+        Theme.styleSuccessButton(btnConclude); // Koristimo zelenu iz teme
+
+        JButton btnCancel = new JButton("Otkaži Sesiju (Cancel)");
+        Theme.styleDangerButton(btnCancel); // Koristimo crvenu iz teme
 
         buttonPanel.add(btnConclude);
         buttonPanel.add(btnCancel);
-        buttonPanel.add(btnRefresh);
         add(buttonPanel, BorderLayout.SOUTH);
 
         // --- LISTENERS ---
-
-        btnRefresh.addActionListener(e -> loadSessions());
 
         // LOGIKA ZA CONCLUDE
         btnConclude.addActionListener(e -> {
             int selectedRow = table.getSelectedRow();
             if (selectedRow == -1) {
-                JOptionPane.showMessageDialog(this, "Selektuj sesiju!");
+                JOptionPane.showMessageDialog(this, "Selektuj sesiju koju želiš da zaključiš.");
                 return;
             }
 
             Session selectedSession = currentSessions.get(selectedRow);
             Long myId = AppState.getInstance().getCurrentUserId();
 
-            // 1. Provera da li si HOST
             if(!selectedSession.hostId.equals(myId)) {
-                JOptionPane.showMessageDialog(this, "Samo HOST može da zaključi sesiju.");
+                JOptionPane.showMessageDialog(this, "Samo HOST (Organizator) može da zaključi sesiju.");
                 return;
             }
 
-            // 2. Provera da li je sesija vec gotova
             if("FINISHED".equals(selectedSession.status) || "CANCELED".equals(selectedSession.status)){
-                JOptionPane.showMessageDialog(this, "Ova sesija je već završena ili otkazana.");
+                JOptionPane.showMessageDialog(this, "Sesija je već završena/otkazana.");
                 return;
             }
 
-            // 3. FETCH IGRACA (LAZY LOADING)
+            // Lazy loading igraca
             new SwingWorker<List<SessionPlayer>, Void>() {
                 @Override
                 protected List<SessionPlayer> doInBackground() throws Exception {
                     return clientApp.getSessionPlayers(selectedSession.id);
                 }
-
                 @Override
                 protected void done() {
                     try {
                         List<SessionPlayer> players = get();
-
-                        // 4. OTVARANJE DIJALOGA ZA PRISUSTVO (Ovo ostaje Dialog jer je popup)
                         String gameName = (selectedSession.game != null) ? selectedSession.game.getName() : selectedSession.title;
-
-                        // Kada zatvorimo dijalog, zelimo osvezavanje.
-                        // Mozemo dodati WindowListener na dijalog ili jednostavno osveziti odmah nakon
-
-                        System.out.println("=== DEBUG PODATAKA ===");
-                        if (players != null) {
-                            for (SessionPlayer p : players) {
-                                System.out.println("ID: " + p.userId + " | Username: " + p.username); // <--- DA LI JE OVO NULL?
-                            }
-                        } else {
-                            System.out.println("Lista igrača je NULL!");
-                        }
 
                         ConcludeDialog dialog = new ConcludeDialog(clientApp, selectedSession.id, gameName, players);
                         dialog.setVisible(true);
 
-                        // Osvezi tabelu nakon sto se dijalog zatvori (jer je modalan, kod staje ovde dok se ne zatvori)
-                        loadSessions();
-
+                        loadSessions(); // Osvezi nakon zatvaranja dijaloga
                     } catch (Exception ex) {
                         ex.printStackTrace();
                         JOptionPane.showMessageDialog(MySessionsPanel.this, "Greška: " + ex.getMessage());
@@ -128,27 +133,25 @@ public class MySessionsPanel extends JPanel {
         // LOGIKA ZA CANCEL
         btnCancel.addActionListener(e -> {
             int selectedRow = table.getSelectedRow();
-            if (selectedRow == -1) return;
+            if (selectedRow == -1) {
+                JOptionPane.showMessageDialog(this, "Selektuj sesiju za otkazivanje.");
+                return;
+            }
 
             Session session = currentSessions.get(selectedRow);
-            int confirm = JOptionPane.showConfirmDialog(this, "Otkaži sesiju?");
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Da li ste sigurni da želite da OTKAŽETE sesiju: " + session.title + "?",
+                    "Potvrda otkazivanja", JOptionPane.YES_NO_OPTION);
 
             if (confirm == JOptionPane.YES_OPTION) {
-                // Pozivamo metodu iz ClientApp (pretpostavka da je imas implementiranu sa SwingWorker-om)
-                // Ako nemas u ClientApp, moras ovde implementirati SwingWorker kao za Conclude
                 clientApp.cancelSession(session.id);
-
-                // Mali delay pa refresh
                 Timer t = new Timer(500, x -> loadSessions());
                 t.setRepeats(false);
                 t.start();
             }
         });
-
-        // Necemo zvati loadSessions() u konstruktoru, vec eksplicitno kad udjemo na panel
     }
 
-    // 3. Promena: public metoda da bi ClientApp mogao da je pozove pri navigaciji
     public void loadSessions() {
         new SwingWorker<List<Session>, Void>() {
             @Override
@@ -161,7 +164,7 @@ public class MySessionsPanel extends JPanel {
                     currentSessions = get();
                     updateTable(currentSessions);
                 } catch (Exception e) {
-                    // ignore or log
+                    e.printStackTrace();
                 }
             }
         }.execute();

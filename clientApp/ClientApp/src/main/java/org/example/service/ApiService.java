@@ -16,9 +16,9 @@ import java.util.List;
 public class ApiService {
 
     // Backend sluša na /api, pa ovo moramo uključiti u osnovni URL
-    private static final String SESSION_SERVICE_URL = "http://localhost:8082/api";
+    private static final String SESSION_SERVICE_URL = "http://localhost:8084/session-service/api";
     // UserController je mapiran na /user, pa je puna putanja /api/user
-    private static final String USER_SERVICE_URL = "http://localhost:8080/api/user";
+    private static final String USER_SERVICE_URL = "http://localhost:8084/user-service/api/user";
 
     private final HttpClient client;
     private final ObjectMapper mapper;
@@ -89,9 +89,14 @@ public class ApiService {
         sendPost(SESSION_SERVICE_URL + "/session/create", json);
     }
 
-    public List<Session> searchSessions() throws Exception {
-        // Backend putanja: /api/session/search
-        String response = sendGet(SESSION_SERVICE_URL + "/session/search");
+    public List<Session> searchSessions(String queryParams) throws Exception {
+        String url = SESSION_SERVICE_URL + "/session/search";
+        if (queryParams != null && !queryParams.isEmpty()) {
+            url += queryParams;
+        }
+
+        String response = sendGet(url);
+
         // Backend vraća Page<Session>, uzimamo content
         return mapper.readTree(response).get("content")
                 .traverse(mapper).readValueAs(new TypeReference<List<Session>>(){});
